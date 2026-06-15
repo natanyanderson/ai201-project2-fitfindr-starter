@@ -44,3 +44,27 @@ def test_suggest_outfit_with_wardrobe():
     result = suggest_outfit(new_item, get_example_wardrobe())
     assert isinstance(result, str)
     assert len(result) > 0
+
+from tools import create_fit_card
+
+def test_create_fit_card_returns_caption():
+    new_item = {
+        "title": "Y2K Baby Tee — Butterfly Print",
+        "price": 18.0,
+        "platform": "depop",
+        "style_tags": ["y2k", "vintage"]
+    }
+    outfit = "Pair with baggy jeans and chunky sneakers for a streetwear look."
+    result = create_fit_card(outfit, new_item)
+    assert isinstance(result, str)
+    assert len(result) > 0
+
+def test_create_fit_card_empty_outfit():
+    new_item = {
+        "title": "Y2K Baby Tee — Butterfly Print",
+        "price": 18.0,
+        "platform": "depop"
+    }
+    result = create_fit_card("", new_item)
+    assert isinstance(result, str)
+    assert len(result) > 0  # returns error message, not empty string
