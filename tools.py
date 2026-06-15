@@ -19,6 +19,8 @@ from groq import Groq
 
 from utils.data_loader import load_listings
 
+_OUTFIT_MODEL = "llama-3.3-70b-versatile"
+
 load_dotenv()
 
 
@@ -78,34 +80,98 @@ def search_listings(
 
 
 # ── Tool 2: suggest_outfit ────────────────────────────────────────────────────
-
+ 
 def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
     """
     Given a thrifted item and the user's wardrobe, suggest 1–2 complete outfits.
-
+ 
     Args:
         new_item: A listing dict (the item the user is considering buying).
         wardrobe: A wardrobe dict with an 'items' key containing a list of
-                  wardrobe item dicts. May be empty — handle this gracefully.
-
+                  wardrobe item dicts. May be empty — handled gracefully.
+ 
     Returns:
-        A non-empty string with outfit suggestions.
-        If the wardrobe is empty, offer general styling advice for the item
-        rather than raising an exception or returning an empty string.
-
-    TODO:
-        1. Check whether wardrobe['items'] is empty.
-        2. If empty: call the LLM with a prompt for general styling ideas
-           (what kinds of items pair well, what vibe it suits, etc.).
-        3. If not empty: format the wardrobe items into a prompt and ask
-           the LLM to suggest specific outfit combinations using the new item
-           and named pieces from the wardrobe.
-        4. Return the LLM's response as a string.
-
-    Before writing code, fill in the Tool 2 section of planning.md.
+        A non-empty string with outfit suggestions. If the wardrobe has items,
+        the suggestion names specific pieces from it. If the wardrobe is empty,
+        returns general styling advice for the new item instead.
     """
-    # Replace this with your implementation
-    return ""
+    client = _get_groq_client()
+ 
+    # Summarize the new item for the prompt, tolerating missing fields.
+    item_summary = (
+        f"Title: {new_item.get('title', 'Unknown item')}\n"
+        f"Category: {new_item.get('category', 'unknown')}\n"
+        f"Style tags: {', '.join(new_item.get('style_tags', [])) or 'none listed'}\n"
+        f"Colors: {', '.join(new_item.get('colors', [])) or 'none listed'}\n"
+        f"Condition: {new_item.get('condition', 'unknown')}\n"
+        f"Price: ${new_item.get('price', 'unknown')}\n"
+        f"Platform: {new_item.get('platform', 'unknown')}"
+    )
+ 
+    items = wardrobe.get("items", []) if isinstance(wardrobe, dict) else []
+ 
+    system_msg = (
+        "You are FitFindr, a sharp thrift-and-styling assistant. You suggest "
+        "wearable, specific outfits and keep your answers concise (under ~150 "
+        "words). Never invent items the user does not have."
+    )
+ 
+    if not items:
+        # Empty wardrobe → general styling advice, no exception.
+        user_msg = (
+            "A user is considering buying this thrifted item:\n\n"
+            f"{item_summary}\n\n"
+            "They have not shared their existing wardrobe. Suggest 1–2 complete "
+            "outfit ideas built around this item. For each, describe the kinds of "
+            "pieces (tops, bottoms, shoes, layers, accessories) that pair well "
+            "with it and the overall vibe it creates. Keep it practical and "
+            "specific so they can picture wearing it."
+        )
+    else:
+        # Format the wardrobe so the model can reference pieces by name.
+        wardrobe_lines = []
+        for w in items:
+            name = w.get("title") or w.get("name") or "unnamed piece"
+            descriptors = []
+            if w.get("category"):
+                descriptors.append(str(w["category"]))
+            if w.get("colors"):
+                descriptors.append(", ".join(w["colors"]))
+            if w.get("style_tags"):
+                descriptors.append(", ".join(w["style_tags"]))
+            detail = f" ({'; '.join(descriptors)})" if descriptors else ""
+            wardrobe_lines.append(f"- {name}{detail}")
+        wardrobe_text = "\n".join(wardrobe_lines)
+ 
+        user_msg = (
+            "A user is considering buying this thrifted item:\n\n"
+            f"{item_summary}\n\n"
+            "Here is what they already own:\n\n"
+            f"{wardrobe_text}\n\n"
+            "Suggest 1–2 complete outfits that combine the new item with pieces "
+            "from their wardrobe. Name the specific wardrobe pieces you use in "
+            "each outfit, and briefly explain why the combination works."
+        )
+ 
+    response = client.chat.completions.create(
+        model=_OUTFIT_MODEL,
+        messages=[
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_msg},
+        ],
+        temperature=0.7,
+    )
+ 
+    suggestion = (response.choices[0].message.content or "").strip()
+ 
+    # Guarantee a non-empty return even if the model gives back nothing.
+    if not suggestion:
+        return (
+            f"Here's a styling idea for the {new_item.get('title', 'item')}: "
+            "pair it with neutral basics and let it be the statement piece."
+        )
+ 
+    return suggestion
 
 
 # ── Tool 3: create_fit_card ───────────────────────────────────────────────────

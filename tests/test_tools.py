@@ -13,3 +13,34 @@ def test_search_empty_results():
 def test_search_price_filter():
     results = search_listings("jacket", size=None, max_price=10)
     assert all(item["price"] <= 10 for item in results)
+
+from tools import suggest_outfit
+from utils.data_loader import get_example_wardrobe, get_empty_wardrobe
+
+def test_suggest_outfit_empty_wardrobe():
+    new_item = {
+        "title": "Y2K Baby Tee",
+        "category": "tops",
+        "style_tags": ["y2k", "vintage"],
+        "colors": ["white", "pink"],
+        "condition": "excellent",
+        "price": 18.0,
+        "platform": "depop"
+    }
+    result = suggest_outfit(new_item, get_empty_wardrobe())
+    assert isinstance(result, str)
+    assert len(result) > 0  # must return something, not crash
+
+def test_suggest_outfit_with_wardrobe():
+    new_item = {
+        "title": "Y2K Baby Tee",
+        "category": "tops",
+        "style_tags": ["y2k", "vintage"],
+        "colors": ["white", "pink"],
+        "condition": "excellent",
+        "price": 18.0,
+        "platform": "depop"
+    }
+    result = suggest_outfit(new_item, get_example_wardrobe())
+    assert isinstance(result, str)
+    assert len(result) > 0
